@@ -111,24 +111,51 @@ div[data-testid="stVerticalBlockBorderWrapper"]:hover {
     100% { opacity: 1; transform: scale(1)    translateY(0); }
 }
 
-/* 게이지 */
-.gauge-row   { display: flex; align-items: center; gap: 14px; margin: 14px 0; }
-.gauge-label { width: 108px; font-size: 15px; font-weight: 700; color: #4a4860; }
-.gauge-label.right { text-align: left; }
-.gauge-label.left  { text-align: right; }
-.gauge-bar {
-    flex: 1; height: 22px; border-radius: 11px;
-    background: #e8e6f4; overflow: hidden; display: flex;
+/* 중앙 기준 양방향 게이지 */
+.bi-row {
+    display: grid;
+    grid-template-columns: 150px 1fr 150px;
+    align-items: center;
+    gap: 12px;
+    margin: 18px 0;
 }
-.gauge-fill {
-    background: linear-gradient(90deg, #6c5ce7, #9242b8);
-    height: 100%; border-radius: 11px;
-    animation: fillUp 1.2s ease-out;
-}
-.gauge-pct { width: 52px; font-size: 15px; font-weight: 800; color: #6c5ce7; }
-@keyframes fillUp { from { width: 0; } }
+.bi-label { font-size: 14px; font-weight: 700; color: #b9b7ca; }
+.bi-label.left  { text-align: right; }
+.bi-label.right { text-align: left; }
+.bi-label.strong { color: #6c5ce7; }
+.bi-pct { font-size: 12px; font-weight: 700; opacity: 0.85; }
 
-.result-head { font-size: 21px; font-weight: 800; color: #2d2b45; margin: 26px 0 4px 0; }
+.bi-track { position: relative; display: flex; height: 22px; }
+.bi-track::before {
+    content: ""; position: absolute; left: 50%; top: -4px; bottom: -4px;
+    width: 2px; transform: translateX(-50%);
+    background: #cbc7de; border-radius: 1px; z-index: 3;
+}
+.bi-balance {
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 4;
+    background: #ffffff;
+    color: #8a879c;
+    font-size: 11px; font-weight: 800;
+    padding: 2px 10px; border-radius: 999px;
+    border: 1.5px solid #cbc7de;
+    white-space: nowrap;
+}
+.bi-half {
+    flex: 1; height: 100%; display: flex; overflow: hidden;
+    background: #ebe8f5;
+}
+.bi-half.left  { justify-content: flex-end;   border-radius: 11px 0 0 11px; }
+.bi-half.right { justify-content: flex-start;  border-radius: 0 11px 11px 0; }
+.bi-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #6c5ce7, #9242b8);
+    animation: fillUp 1.0s ease-out;
+}
+@keyframes fillUp { from { width: 0 !important; } }
+
+.result-head { font-size: 21px; font-weight: 800; color: #2d2b45; margin: 26px 0 8px 0; }
 .progress-text { font-size: 15px; font-weight: 700; color: #6c5ce7; margin-bottom: 4px; }
 </style>
 """, unsafe_allow_html=True)
@@ -155,28 +182,51 @@ TYPE_INFO = {
 LABELS_P1 = ["전혀 중요하지 않음", "별로 중요하지 않음", "보통임", "중요함", "매우 중요함"]
 SLIDER_OPTS = ["①", "②", "③", "④", "⑤"]
 
+def lean(a, b):
+    """두 중요도 점수의 '차이'로 왼쪽(a) 기울기 % 계산 (일관적·선형)."""
+    return 50 + (a - b) / 4 * 50
+
+def slider_lean(avg):
+    """슬라이더 평균(1~5)을 그대로 왼쪽 기울기 %로 변환."""
+    return (avg - 1) / 4 * 100
+
 def get_dimensions(price, service, location, vibe, q3_1, q3_2, q4_1, q4_2):
     dims = []
-    pct_e = price / (price + service) * 100
-    dims.append(("E" if pct_e >= 50 else "P", pct_e, "💰 가성비", "✨ 프리미엄"))
-    pct_l = location / (location + vibe) * 100
-    dims.append(("L" if pct_l >= 50 else "V", pct_l, "📍 효율", "🌿 감성"))
-    act = (q3_1 + q3_2) / 2
-    pct_r = (act - 1) / 4 * 100
-    dims.append(("R" if pct_r >= 50 else "A", pct_r, "🛋️ 휴식", "🏃 액티브"))
-    plan = (q4_1 + q4_2) / 2
-    pct_c = (plan - 1) / 4 * 100
-    dims.append(("C" if pct_c >= 50 else "S", pct_c, "🗓️ 계획", "🎲 즉흥"))
+    pe = lean(price, service)
+    dims.append(("E" if pe >= 50 else "P", pe, "💰 가성비", "✨ 프리미엄"))
+    pl = lean(location, vibe)
+    dims.append(("L" if pl >= 50 else "V", pl, "📍 효율", "🌿 감성"))
+    pr = slider_lean((q3_1 + q3_2) / 2)
+    dims.append(("R" if pr >= 50 else "A", pr, "🛋️ 휴식", "🏃 액티브"))
+    pc = slider_lean((q4_1 + q4_2) / 2)
+    dims.append(("C" if pc >= 50 else "S", pc, "🗓️ 계획", "🎲 즉흥"))
     return dims
 
 def gauge_html(left_label, right_label, left_pct):
-    return f"""
-    <div class="gauge-row">
-        <span class="gauge-label left">{left_label}</span>
-        <div class="gauge-bar"><div class="gauge-fill" style="width:{left_pct:.0f}%"></div></div>
-        <span class="gauge-label right">{right_label}</span>
-        <span class="gauge-pct">{max(left_pct, 100-left_pct):.0f}%</span>
-    </div>"""
+    dev = left_pct - 50
+    left_fill = max(dev, 0) / 50 * 100
+    right_fill = max(-dev, 0) / 50 * 100
+    dom_pct = max(left_pct, 100 - left_pct)
+    is_balanced = (dev == 0)
+
+    left_cls = "strong" if dev > 0 else ""
+    right_cls = "strong" if dev < 0 else ""
+    left_txt = f'{left_label} <span class="bi-pct">{dom_pct:.0f}%</span>' if dev > 0 else left_label
+    right_txt = f'{right_label} <span class="bi-pct">{dom_pct:.0f}%</span>' if dev < 0 else right_label
+
+    badge = '<span class="bi-balance">균형</span>' if is_balanced else ''
+
+    return (
+        f'<div class="bi-row">'
+        f'<div class="bi-label left {left_cls}">{left_txt}</div>'
+        f'<div class="bi-track">'
+        f'<div class="bi-half left"><div class="bi-fill" style="width:{left_fill:.0f}%"></div></div>'
+        f'<div class="bi-half right"><div class="bi-fill" style="width:{right_fill:.0f}%"></div></div>'
+        f'{badge}'
+        f'</div>'
+        f'<div class="bi-label right {right_cls}">{right_txt}</div>'
+        f'</div>'
+    )
 
 def comfort_note(sleep, hygiene):
     notes = []
@@ -194,6 +244,10 @@ def comfort_note(sleep, hygiene):
 
 def mark_touched(k):
     st.session_state[f"touched_{k}"] = True
+
+def reset_test():
+    for k in list(st.session_state.keys()):
+        del st.session_state[k]
 
 # ── 헤더 ──
 st.markdown("""
@@ -233,7 +287,8 @@ for title, desc in questions_part1:
     with st.container(border=True):
         st.markdown(f'<p class="q-title">{title}</p>', unsafe_allow_html=True)
         st.markdown(f'<p class="q-desc">{desc}</p>', unsafe_allow_html=True)
-        answers1[title] = st.radio(title, LABELS_P1, index=None, horizontal=True, label_visibility="collapsed")
+        answers1[title] = st.radio(title, LABELS_P1, index=None, horizontal=True,
+                                   label_visibility="collapsed", key=f"r1_{title}")
 
 st.write("")
 
@@ -259,12 +314,13 @@ answers2 = {}
 for key, title, low, high in questions_part2:
     with st.container(border=True):
         st.markdown(f'<p class="q-title">{title}</p>', unsafe_allow_html=True)
-        st.markdown(f"""
-        <div class="anchor-wrap">
-            <div class="anchor low">◀ {low}</div>
-            <div class="anchor high">{high} ▶</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="anchor-wrap">'
+            f'<div class="anchor low">◀ {low}</div>'
+            f'<div class="anchor high">{high} ▶</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
         answers2[key] = st.select_slider(
             key, options=SLIDER_OPTS, value="③",
             key=key, on_change=mark_touched, args=(key,),
@@ -283,41 +339,46 @@ total = len(answers1) + len(p2_keys)
 st.markdown(f'<p class="progress-text">📝 진행률 — {done} / {total} 문항 완료</p>', unsafe_allow_html=True)
 st.progress(done / total)
 
-# ── 결과 ──
+# ── 결과 제출 ──
 if done < total:
     st.button("🔒 모든 문항에 답하면 결과를 볼 수 있어요", use_container_width=True, disabled=True)
 else:
     if st.button("🔍 결과 확인하기", use_container_width=True, type="primary"):
+        st.session_state["submitted"] = True
         st.balloons()
-        s1 = {k: LABELS_P1.index(v) + 1 for k, v in answers1.items()}
-        price, service = s1["💸 가격"], s1["🛎️ 서비스"]
-        location, vibe = s1["📍 위치"], s1["✨ 분위기"]
-        sleep, hygiene = s1["😴 수면의 질"], s1["🧼 위생"]
 
-        s2 = {k: SLIDER_OPTS.index(answers2[k]) + 1 for k in p2_keys}
-        q3_1, q3_2 = s2["q3_1"], s2["q3_2"]
-        q4_1, q4_2 = s2["q4_1"], s2["q4_2"]
+# ── 결과 표시 (제출 후 유지) ──
+if st.session_state.get("submitted") and done == total:
+    s1 = {k: LABELS_P1.index(v) + 1 for k, v in answers1.items()}
+    price, service = s1["💸 가격"], s1["🛎️ 서비스"]
+    location, vibe = s1["📍 위치"], s1["✨ 분위기"]
+    sleep, hygiene = s1["😴 수면의 질"], s1["🧼 위생"]
 
-        dims = get_dimensions(price, service, location, vibe, q3_1, q3_2, q4_1, q4_2)
-        code = "".join(d[0] for d in dims)
-        name, desc, rec = TYPE_INFO[code]
+    s2 = {k: SLIDER_OPTS.index(answers2[k]) + 1 for k in p2_keys}
+    q3_1, q3_2 = s2["q3_1"], s2["q3_2"]
+    q4_1, q4_2 = s2["q4_1"], s2["q4_2"]
 
-        st.markdown(f"""
-        <div class="result-card">
-            <div class="code">{code}</div>
-            <div class="name">{name}</div>
-            <div class="desc">{desc}</div>
-        </div>
-        """, unsafe_allow_html=True)
+    dims = get_dimensions(price, service, location, vibe, q3_1, q3_2, q4_1, q4_2)
+    code = "".join(d[0] for d in dims)
+    name, desc, rec = TYPE_INFO[code]
 
-        st.info(f"💡 **이런 숙소가 잘 맞아요** — {rec}")
+    st.markdown(
+        f'<div class="result-card">'
+        f'<div class="code">{code}</div>'
+        f'<div class="name">{name}</div>'
+        f'<div class="desc">{desc}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
-        st.markdown('<p class="result-head">📊 나의 성향 분포</p>', unsafe_allow_html=True)
-        st.markdown('<p class="q-desc">막대가 왼쪽으로 길수록 왼쪽 성향이에요. 숫자는 우세한 쪽의 비율이에요.</p>', unsafe_allow_html=True)
-        for d_code, left_pct, l_label, r_label in dims:
-            st.markdown(gauge_html(l_label, r_label, left_pct), unsafe_allow_html=True)
-            if abs(left_pct - 50) < 10:
-                st.caption(f"→ {l_label}·{r_label} 거의 반반! 상황에 따라 양쪽 모습이 모두 나타날 수 있어요.")
+    st.info(f"💡 **이런 숙소가 잘 맞아요** — {rec}")
 
-        st.markdown('<p class="result-head">🛏️ 컨디션 메모</p>', unsafe_allow_html=True)
-        st.markdown(f'<p class="q-desc">{comfort_note(sleep, hygiene)}</p>', unsafe_allow_html=True)
+    st.markdown('<p class="result-head">📊 나의 성향 분포</p>', unsafe_allow_html=True)
+    for d_code, left_pct, l_label, r_label in dims:
+        st.markdown(gauge_html(l_label, r_label, left_pct), unsafe_allow_html=True)
+
+    st.markdown('<p class="result-head">🛏️ 컨디션 메모</p>', unsafe_allow_html=True)
+    st.markdown(f'<p class="q-desc">{comfort_note(sleep, hygiene)}</p>', unsafe_allow_html=True)
+
+    st.write("")
+    st.button("🔄 다시 검사하기", use_container_width=True, on_click=reset_test)
